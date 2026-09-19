@@ -1,0 +1,3 @@
+# kube-prometheus-stack overrides for the per-release (Makefile) install.
+# (No node pinning by default — portable across clusters.)
+{}

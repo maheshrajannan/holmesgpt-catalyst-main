@@ -1,0 +1,25 @@
+---
+# ArgoCD Application that syncs the Grafana dashboard ConfigMaps into the monitoring namespace.
+# kube-prometheus-stack's Grafana sidecar auto-imports any ConfigMap labeled grafana_dashboard=1.
+# Applied by: make dashboards
+
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: grafana-dashboards
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/${GITHUB_OWNER}/sre-platform-services
+    path: platform/grafana-dashboards
+    targetRevision: HEAD
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=false

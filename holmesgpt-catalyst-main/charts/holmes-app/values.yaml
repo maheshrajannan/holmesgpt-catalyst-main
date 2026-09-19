@@ -1,0 +1,63 @@
+# holmes-app — the investigator + the github-mcp connector (own release, holmes ns).
+# Independently upgradable: `helm upgrade holmes-app charts/holmes-app -n holmes`.
+
+# Empty = schedule anywhere (portable default). Pin via `make … NODE_POOL=<pool>`.
+nodeSelector: {}
+
+investigator:
+  image:
+    repo: docker.io/tezizzm/holmes-investigator
+    tag: latest
+    pullPolicy: Always
+  replicas: 1
+  model: gpt-4o   # gpt-4o-mini is too weak at multi-step tool selection (mis-picks tools)
+  # Post-investigation summarizer model. Defaults to `model` if unset; keep it off
+  # gpt-4o-mini, which confabulates failures (e.g. false "access denied") in summaries.
+  summaryModel: gpt-4o
+  eventsStore: agent-workflow
+  # Per-tool-subprocess virtual-memory cap (ulimit -v). The HolmesGPT default
+  # (800 on x86_64) OOM-kills Go tools like kubectl at startup; raise it.
+  toolMemoryLimitMB: 4000
+  service:
+    type: LoadBalancer
+    port: 80
+    dnsLabel: demo-holmes-investigator
+
+catalyst:
+  # No hardcoded project here — supply per-deploy (the Makefile derives these
+  # from `diagrid project get`; or pass --set catalyst.grpcEndpoint=… ). Required.
+  grpcEndpoint: ""
+  httpEndpoint: ""
+
+secret:
+  name: sre-agent-secrets
+  create: false
+  data: {}
+
+# Endpoints Holmes reaches ACROSS the namespace (≈ cluster) boundary. Defaults
+# assume the multi-namespace layout; override for a different topology.
+toolsets:
+  kubernetes: true
+  prometheus:
+    enabled: true
+    url: "http://kube-prometheus-stack-prometheus.monitoring.svc.cluster.local:9090"
+  argocd:
+    enabled: true
+    server: "argocd-server.argocd.svc.cluster.local:443"   # host:port, no scheme
+    opts: "--grpc-web --insecure"
+
+# MCP servers Holmes calls. github-mcp is deployed HERE (with Holmes); the
+# yugabytedb/pulsar MCP servers live next to their services (other namespaces),
+# so they're referenced by FQDN — deployed by the holmes-yugabyte / holmes-pulsar charts.
+mcp:
+  github:
+    enabled: true
+    image: ghcr.io/github/github-mcp-server:latest
+    toolsets: "actions,pull_requests,repos"
+    url: "http://github-mcp:8000/mcp"                                  # same namespace
+  yugabytedb:
+    enabled: true
+    url: "http://yugabytedb-mcp.yugabyte.svc.cluster.local:8000/mcp"   # yugabyte ns
+  pulsar:
+    enabled: true
+    url: "http://snmcp.pulsar.svc.cluster.local:9090/snmcp/mcp"              # pulsar ns
